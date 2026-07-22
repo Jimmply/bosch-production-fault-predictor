@@ -1,0 +1,49 @@
+data:
+  kaggle_competition: "bosch-production-line-performance"
+  raw_dir: "data/bosch-production-line-performance"
+  parquet_dir: "data/processed"
+  files:
+    train_numeric: "train_numeric.csv"
+    train_categorical: "train_categorical.csv"
+    train_date: "train_date.csv"
+    test_numeric: "test_numeric.csv"
+    test_date: "test_date.csv"
+
+loading:
+  chunksize: 100_000
+  low_memory: false
+  target_col: "Response"
+  id_col: "Id"
+
+split:
+  strategy: "stratified"      # "stratified" | "time" — time uses TimeSeriesSplit ordered by transit_time_first
+  test_size: 0.2
+  random_seed: 42
+  n_folds: 5
+
+baseline_xgb:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.6
+  scale_pos_weight: 170        # ~ 1 / positive_rate for the 0.6% imbalance
+  early_stopping_rounds: 30
+  eval_metric: "aucpr"
+  random_state: 42
+  n_jobs: -1
+
+survival_cox:
+  duration_col: "transit_time_total"
+  event_col: "Response"
+  penalizer: 0.01
+  step_size: 0.5
+
+station_attribution:
+  station_regex: "^L(\\d+)_S(\\d+)_"
+  top_k_stations: 15
+
+streamlit:
+  page_title: "Bosch Production Fault Predictor"
+  page_icon: "🏭"
+  cache_ttl_seconds: 3600
