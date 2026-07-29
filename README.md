@@ -40,6 +40,16 @@ Top 3 stations by SHAP-attribution share:
 
 **Line 3 dominates the top of the list** — 7 of the top 10 attributed stations are on Line 3, a diagnosis a vanilla accuracy score cannot deliver.
 
+### But it's actually more nuanced than that
+
+Rolled up to production-line level, the picture shifts:
+
+![Attribution rolled up per line](docs/img/attribution_by_line.png)
+
+Line 0 actually accumulates slightly *more* total SHAP attribution (50%) than Line 3 (40%) — because Line 0 has 24 contributing stations vs Line 3's 21. Line 3 dominates the **top-of-list** stations (concentrated risk on a few stations), whereas Line 0 has broader, distributed risk. Both are worth investigating, but the interventions differ: Line 3 needs targeted station-level rework; Line 0 needs a systemic line-wide look.
+
+This is exactly the kind of split-view an aggregate accuracy number hides.
+
 ### Cox survival highlights
 
 Top three hazard-driving station-level covariates (from the 119-covariate Cox fit on the 300k stratified sample):
