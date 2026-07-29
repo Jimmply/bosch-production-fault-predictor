@@ -1,0 +1,46 @@
+.PHONY: setup download train cox dashboard test clean lint help
+
+PYTHON := .venv/bin/python
+STREAMLIT := .venv/bin/streamlit
+PYTEST := .venv/bin/pytest
+
+help:
+	@echo "targets:"
+	@echo "  make setup       create venv and install deps"
+	@echo "  make download    fetch and reencode Bosch data (needs Kaggle token)"
+	@echo "  make train       train baseline XGBoost + SHAP attribution"
+	@echo "  make cox         fit Cox model on top-30 SHAP stations"
+	@echo "  make dashboard   launch Streamlit dashboard"
+	@echo "  make test        pytest"
+	@echo "  make clean       remove venv, caches, models"
+
+setup:
+	python3 -m venv .venv
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install pytest pytest-cov
+
+download:
+	$(PYTHON) scripts/download_data.py
+
+train:
+	$(PYTHON) scripts/train.py
+
+train-sample:
+	$(PYTHON) scripts/train.py --sample-n 300000
+
+cox:
+	$(PYTHON) scripts/fit_cox.py
+
+dashboard:
+	$(STREAMLIT) run src/app.py
+
+test:
+	$(PYTEST) tests/ -v
+
+lint:
+	$(PYTHON) -m ruff check src tests scripts
+
+clean:
+	rm -rf .venv .pytest_cache .ruff_cache __pycache__ src/__pycache__ tests/__pycache__ scripts/__pycache__
+	find . -name "*.pyc" -delete
