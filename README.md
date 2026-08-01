@@ -148,6 +148,16 @@ bosch-production-fault-predictor/
 └── tests/                       # pytest smoke tests
 ```
 
+## Roadmap
+
+Things I still want to try (in rough priority order):
+
+- [ ] Time-aware CV — flag exists (`split.strategy: time`) but haven't compared numbers head-to-head yet.
+- [ ] Optuna tuning integrated into `train.py` — the stub in `scripts/tune_xgb.py` needs a config loader.
+- [ ] Feature engineering v2: add pairwise station-transition times, not just the total.
+- [ ] Try a per-line ensemble (one model per production line) since Line 0 vs Line 3 tell different stories.
+- [ ] Actually write the notebooks in `notebooks/` (currently script-first).
+
 ## Author
 
 **Dmitry Shurkhai** — Manufacturing Data Scientist
