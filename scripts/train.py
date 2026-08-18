@@ -69,6 +69,28 @@ def load_train_frame(cfg: dict, sample_n: int | None) -> tuple[pd.DataFrame, pd.
     return X, y, date_features
 
 
+def _maybe_apply_tuned_params(cfg: dict) -> None:
+    """If config/tuned_params.yaml exists (written by scripts/tune_xgb.py), overlay its params on baseline_xgb."""
+    tuned_path = REPO_ROOT / "config" / "tuned_params.yaml"
+    if not tuned_path.exists():
+        return
+    with open(tuned_path) as f:
+        tuned = yaml.safe_load(f) or {}
+    params = tuned.get("params", {})
+    if not params:
+        logger.info("tuned_params.yaml exists but has no 'params' key — skipping")
+        return
+    overrides = {k: v for k, v in params.items() if k in cfg["baseline_xgb"] or k in {
+        "n_estimators", "max_depth", "learning_rate", "min_child_weight",
+        "subsample", "colsample_bytree",
+    }}
+    if not overrides:
+        return
+    logger.info("applying tuned params from %s: %s (tuned MCC = %s)",
+                tuned_path.name, overrides, tuned.get("best_mcc", "?"))
+    cfg["baseline_xgb"].update(overrides)
+
+
 def save_artifacts(model, metrics: dict, threshold: float, attribution: pd.DataFrame, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     model.save_model(str(out_dir / "baseline_xgb.json"))
@@ -89,6 +111,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config()
+    _maybe_apply_tuned_params(cfg)
     X, y, transit = load_train_frame(cfg, sample_n=args.sample_n)
     logger.info("positive rate = %.4f (%d / %d)", y.mean(), y.sum(), len(y))
 
