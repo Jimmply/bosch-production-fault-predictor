@@ -1,0 +1,8 @@
+best_mcc: 0.18829776974520673
+params:
+  colsample_bytree: 0.7120408127066865
+  learning_rate: 0.020153425505297702
+  max_depth: 8
+  min_child_weight: 7
+  n_estimators: 100
+  subsample: 0.7246844304357644
