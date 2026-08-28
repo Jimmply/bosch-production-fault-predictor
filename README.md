@@ -13,16 +13,34 @@ Rather than yet another vanilla-XGBoost notebook (of which Kaggle has hundreds),
 
 ## Results
 
-Trained on the **full 1,183,747-row training set** with 208 engineered features (per-station aggregates, per-line missing-pattern features, transit-time features derived from station timestamps). Positive rate = **0.58%** (6,879 defective parts). Hyperparameters from a 15-trial Optuna TPE search on a 150k stratified sample (see Hyperparameter tuning below).
+Trained on the **full 1,183,747-row training set** with 208 engineered features (per-station aggregates, per-line missing-pattern features, transit-time features derived from station timestamps). Positive rate = **0.58%** (6,879 defective parts). Hyperparameters from a 15-trial Optuna TPE search on a 150k stratified sample. **Cross-validation is time-aware** (parts sorted by first-station timestamp; `TimeSeriesSplit` walk-forward).
 
 | Model | 5-fold MCC | AUC-PR | AUC | Concordance |
 |---|---|---|---|---|
 | Majority-class baseline | 0.000 | 0.006 | 0.500 | — |
-| **XGBoost + engineered features (tuned)** | **0.170 ± 0.006** | **0.069** | **0.717** | — |
-| XGBoost @ threshold-optimal (0.892) | **0.190** (full-fit) | — | — | — |
+| **XGBoost + engineered features (tuned, time-aware CV)** | **0.143 ± 0.063** | **0.039** | **0.563** | — |
+| XGBoost @ threshold-optimal (0.896) | **0.185** (full-fit) | — | — | — |
 | **Cox proportional-hazards (top-30 stations)** | — | — | — | **0.771** |
 
-*Bosch's official metric is Matthews Correlation Coefficient (MCC). The 2016 competition winners scored ≈ 0.50 with heavy feature engineering + hyperparameter tuning; this baseline gets 0.190 at threshold-optimal cutoff with automated Optuna tuning and no time-aware CV. See the tuning notes below for why the number is where it is.*
+*Bosch's official metric is Matthews Correlation Coefficient (MCC). The 2016 competition winners scored ≈ 0.50 with heavy feature engineering, time-aware validation, and long tuning campaigns; this baseline shipped at 0.185 at threshold-optimal cutoff on a **time-aware split**. See "Split strategy — the big finding" below for why the CV numbers look worse than they did a week ago (they're now honest).*
+
+### Split strategy — the big finding
+
+Switched cross-validation from stratified k-fold to **time-aware** `TimeSeriesSplit` (parts sorted by `transit_time_first`, folds walk forward in time). Full-data re-run — same tuned hyperparameters, only the split strategy changed:
+
+| Metric | Stratified k-fold | Time-aware CV | Δ |
+|---|---|---|---|
+| CV MCC (mean ± std) | 0.170 ± **0.006** | 0.143 ± **0.063** | −0.027 mean, **10× std** |
+| CV AUC | **0.717** | **0.563** | **−0.154** |
+| CV AUC-PR | 0.069 | 0.039 | −0.030 |
+| Full-fit threshold MCC | 0.190 | 0.185 | ≈ |
+| Top station (L3_S33) | 20.4% | 20.1% | ≈ |
+
+**Interpretation.** Bosch parts carry timestamps, and stratified k-fold shuffles them — meaning during training the model can see parts from *future* time periods, which leaks information backward. The time-aware split reveals the true forward-generalization ability: **AUC drops from 0.717 to 0.563** (barely above random), and fold-to-fold **MCC variance grows 10×** (0.006 → 0.063). This is exactly the pattern reported by top Bosch competition finishers a decade ago.
+
+**What it means for the model.** The station-attribution story (Line 3 dominance, L3_S33 as top signal) is stable across both split strategies, so the *diagnostic* value of the SHAP heatmap holds. But the *predictive* power on new parts is much lower than the stratified numbers suggested. In production this would mean: use the model for retrospective root-cause work on Line 3, not for real-time defect gating.
+
+**What comes next.** The obvious hypothesis is *process drift* — station operating characteristics change across shifts / lots / seasons, so the model trained on early parts doesn't generalize to later ones. Testing that hypothesis is now the top open item on the roadmap.
 
 ### Hyperparameter tuning — an honest write-up
 
@@ -53,9 +71,9 @@ Top 3 stations by SHAP-attribution share:
 
 | Rank | Station | Line | Share of \|SHAP\| |
 |---|---|---|---|
-| 1 | L3_S33 | Line 3 | **20.4%** |
-| 2 | L3_S32 | Line 3 | 12.8% |
-| 3 | L1_S24 | Line 1 | 10.1% |
+| 1 | L3_S33 | Line 3 | **20.1%** |
+| 2 | L3_S32 | Line 3 | 12.4% |
+| 3 | L1_S24 | Line 1 | 9.8% |
 
 **Line 3 dominates the top of the list.** Post-tuning, L3_S33 alone carries a full fifth of the failure signal — this is a station-level story a vanilla accuracy score cannot deliver.
 
@@ -63,7 +81,7 @@ Top 3 stations by SHAP-attribution share:
 
 ![Attribution rolled up per line](docs/img/attribution_by_line.png)
 
-Line 3 accumulates **53.0%** of total \|SHAP\| across its 21 stations, versus Line 0's 33.9% across 24 stations. (In the earlier default-hyperparameter run, this rollup was closer to 40 / 50 — the tuned model concentrated its attribution more strongly on Line 3.) Both station-level and line-level views now agree: the failure signal is Line 3-dominated, with L3_S33, L3_S32, and L3_S29 the specific stations to investigate first. Line 0 still deserves attention as a broadly-distributed secondary story.
+Line 3 accumulates **52.8%** of total \|SHAP\| across its 21 stations, versus Line 0's 33.9% across 24 stations. Both station-level and line-level views agree, and the story is stable across split strategies (stratified vs time-aware): the failure signal is **Line 3-dominated**, with L3_S33, L3_S32, and L3_S29 the specific stations to investigate first. Line 0 deserves attention as a broadly-distributed secondary story.
 
 ### Cox survival highlights
 
@@ -167,8 +185,9 @@ bosch-production-fault-predictor/
 
 Things I still want to try (in rough priority order):
 
-- [ ] Time-aware CV — flag exists (`split.strategy: time`) but haven't compared numbers head-to-head yet. Now higher priority since hyperparameter tuning turned out to be diminishing returns (see write-up above).
+- [x] Time-aware CV — implemented (`--split-strategy time`), full-data comparison done. **Big finding: AUC drops 0.717 → 0.563 and fold std grows 10×. See "Split strategy — the big finding" above.** Now shipping as default.
 - [x] Optuna tuning integrated into `train.py` — reads `config/tuned_params.yaml` if `tune_xgb.py` has written it. **Run once; slight AUC gain, flat MCC, tighter Pareto (17 → 11 stations for 70%). Deprioritized further tuning.**
+- [ ] **Investigate process drift** — hypothesis for the time-aware AUC collapse. Split training data by shift/lot/season, check if per-window models generalize better than one global model. Highest-priority open item.
 - [ ] Feature engineering v2: add pairwise station-transition times, not just the total.
 - [ ] Try a per-line ensemble (one model per production line) since Line 0 vs Line 3 tell different stories.
 - [ ] Actually write the notebooks in `notebooks/` (currently script-first).

@@ -65,6 +65,16 @@ def load_train_frame(cfg: dict, sample_n: int | None) -> tuple[pd.DataFrame, pd.
     miss = missing_pattern_features(numeric_features)
 
     X = pd.concat([agg, miss, date_features], axis=1).fillna(0)
+
+    # If we're doing time-aware CV, X and y must be sorted by transit time so
+    # TimeSeriesSplit walks forward in chronological order.
+    if cfg["split"].get("strategy") == "time" and "transit_time_first" in X.columns:
+        order = X["transit_time_first"].sort_values(kind="mergesort").index
+        X = X.loc[order].reset_index(drop=True)
+        y = y.loc[order].reset_index(drop=True)
+        date_features = date_features.loc[order].reset_index(drop=True)
+        logger.info("sorted by transit_time_first for time-aware CV")
+
     logger.info("engineered feature matrix: %s", X.shape)
     return X, y, date_features
 
@@ -108,10 +118,15 @@ def main() -> None:
                         help="Stratified sample size (keeps all positives). Default: use full data.")
     parser.add_argument("--shap-max-samples", type=int, default=10_000,
                         help="Max rows for SHAP computation (SHAP on 1M+ rows OOMs).")
+    parser.add_argument("--split-strategy", choices=["stratified", "time"], default=None,
+                        help="Override split.strategy in config (stratified or time-aware CV).")
     args = parser.parse_args()
 
     cfg = load_config()
     _maybe_apply_tuned_params(cfg)
+    if args.split_strategy is not None:
+        cfg["split"]["strategy"] = args.split_strategy
+        logger.info("overriding split.strategy = %s", args.split_strategy)
     X, y, transit = load_train_frame(cfg, sample_n=args.sample_n)
     logger.info("positive rate = %.4f (%d / %d)", y.mean(), y.sum(), len(y))
 
