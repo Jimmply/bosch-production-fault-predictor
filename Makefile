@@ -1,4 +1,4 @@
-.PHONY: setup download train train-sample tune cox dashboard test clean lint help
+.PHONY: setup download train train-sample train-time train-stratified tune cox dashboard test clean lint help
 
 PYTHON := .venv/bin/python
 STREAMLIT := .venv/bin/streamlit
@@ -8,7 +8,9 @@ help:
 	@echo "targets:"
 	@echo "  make setup       create venv and install deps"
 	@echo "  make download    fetch and reencode Bosch data (needs Kaggle token)"
-	@echo "  make train       train baseline XGBoost + SHAP attribution"
+	@echo "  make train       train baseline XGBoost + SHAP attribution (uses split.strategy from config)"
+	@echo "  make train-time  train with time-aware TimeSeriesSplit (walk-forward)"
+	@echo "  make train-strat train with stratified k-fold (leaks future info — for comparison only)"
 	@echo "  make tune        run optuna hyperparameter search -> config/tuned_params.yaml"
 	@echo "  make cox         fit Cox model on top-30 SHAP stations"
 	@echo "  make dashboard   launch Streamlit dashboard"
@@ -29,6 +31,12 @@ train:
 
 train-sample:
 	$(PYTHON) scripts/train.py --sample-n 300000
+
+train-time:
+	$(PYTHON) scripts/train.py --split-strategy time
+
+train-strat:
+	$(PYTHON) scripts/train.py --split-strategy stratified
 
 tune:
 	$(PYTHON) scripts/tune_xgb.py --n-trials 15 --sample-n 150000
