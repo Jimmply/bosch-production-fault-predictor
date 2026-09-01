@@ -41,6 +41,7 @@ models/*.json
 !models/station_attribution.parquet
 !models/cox_summary.csv
 !models/cox_concordance.txt
+!models/drift_summary.csv
 
 notebooks/.ipynb_checkpoints/
 notebooks/*_output/

@@ -40,7 +40,39 @@ Switched cross-validation from stratified k-fold to **time-aware** `TimeSeriesSp
 
 **What it means for the model.** The station-attribution story (Line 3 dominance, L3_S33 as top signal) is stable across both split strategies, so the *diagnostic* value of the SHAP heatmap holds. But the *predictive* power on new parts is much lower than the stratified numbers suggested. In production this would mean: use the model for retrospective root-cause work on Line 3, not for real-time defect gating.
 
-**What comes next.** The obvious hypothesis is *process drift* — station operating characteristics change across shifts / lots / seasons, so the model trained on early parts doesn't generalize to later ones. Testing that hypothesis is now the top open item on the roadmap.
+**What comes next.** The obvious hypothesis is *process drift* — station operating characteristics change across shifts / lots / seasons, so the model trained on early parts doesn't generalize to later ones. **This is now confirmed — see "Process drift is real" below.**
+
+### Process drift is real
+
+Sorted all 1.18M parts by `transit_time_first`, binned into 10 equal-count sequential windows (~118k parts each, spanning the full training-set time span from t=0 to t≈1717 in the anonymised units), and asked: does the *physical* process actually change across those windows?
+
+![Process drift across time windows](docs/img/drift_analysis.png)
+
+**Defect rate is not stationary.** Across the 10 windows, the positive rate ranges from **0.247% (window 6) to 0.982% (window 4)** — a **~4× swing**. That alone is enough to sink an assumption of i.i.d. data:
+
+| Window | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Defect rate | 0.44% | 0.77% | 0.73% | 0.78% | **0.98%** | 0.68% | **0.25%** | 0.37% | 0.37% | 0.44% |
+
+**Top-attributed station features also drift.** The mean value of each top-SHAP station feature flips sign 2–4 times across the 10 windows:
+
+| Station | min | max | span | sign flips |
+|---|---|---|---|---|
+| L3_S33 (top station) | −0.0145 | +0.0104 | 0.0249 | 3 |
+| L3_S29 | −0.0197 | +0.0255 | 0.0453 | 2 |
+| L0_S0 | −0.0249 | +0.0223 | 0.0472 | 3 |
+| L1_S24 | −0.0020 | +0.0018 | 0.0038 | 4 |
+| L3_S32 | −0.0002 | +0.0003 | 0.0005 | 3 |
+
+Because these are the model's most attribution-heavy features, a change in their per-window distribution directly changes the decision surface — a model fit on early parts is literally being asked a different question by later parts. **This is the mechanism behind the time-aware AUC collapse.**
+
+**What to do about it.** Two actionable branches:
+1. **Windowed / online models** — retrain on a sliding window rather than a single global fit.
+2. **Drift-aware features** — add rolling window-normalized versions of the top stations so the model sees position-relative-to-recent-baseline, not raw value.
+
+Both are now on the roadmap; the windowed-model experiment is the immediate next step.
+
+Reproducible summary at [`models/drift_summary.csv`](models/drift_summary.csv). Regenerate with `python scripts/drift_analysis.py`.
 
 ### Hyperparameter tuning — an honest write-up
 
@@ -187,7 +219,9 @@ Things I still want to try (in rough priority order):
 
 - [x] Time-aware CV — implemented (`--split-strategy time`), full-data comparison done. **Big finding: AUC drops 0.717 → 0.563 and fold std grows 10×. See "Split strategy — the big finding" above.** Now shipping as default.
 - [x] Optuna tuning integrated into `train.py` — reads `config/tuned_params.yaml` if `tune_xgb.py` has written it. **Run once; slight AUC gain, flat MCC, tighter Pareto (17 → 11 stations for 70%). Deprioritized further tuning.**
-- [ ] **Investigate process drift** — hypothesis for the time-aware AUC collapse. Split training data by shift/lot/season, check if per-window models generalize better than one global model. Highest-priority open item.
+- [x] **Investigate process drift** — confirmed. Defect rate ranges 0.247%..0.982% (4× swing) across 10 sequential windows; top-SHAP station means flip sign 2–4× across the same windows. Full write-up in "Process drift is real" above; script at `scripts/drift_analysis.py`.
+- [ ] **Windowed / online model** — top open item now. Retrain on sliding time windows, measure whether per-window models beat the single global fit under time-aware CV.
+- [ ] **Drift-aware features** — add rolling z-scored versions of the top-SHAP station features so the model sees deviation-from-recent-baseline rather than raw values.
 - [ ] Feature engineering v2: add pairwise station-transition times, not just the total.
 - [ ] Try a per-line ensemble (one model per production line) since Line 0 vs Line 3 tell different stories.
 - [ ] Actually write the notebooks in `notebooks/` (currently script-first).
