@@ -16,6 +16,7 @@ summary you can paste into the README.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import sys
 from pathlib import Path
@@ -35,11 +36,20 @@ from features import station_aggregates, transit_time_features
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-N_WINDOWS = 10
-TOP_K_FEATURES = 5
+DEFAULT_N_WINDOWS = 10
+DEFAULT_TOP_K = 5
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--n-windows", type=int, default=DEFAULT_N_WINDOWS,
+                        help="Number of sequential time windows (equal-count).")
+    parser.add_argument("--top-k-features", type=int, default=DEFAULT_TOP_K,
+                        help="How many top-SHAP stations to track across windows.")
+    args = parser.parse_args()
+    n_windows = args.n_windows
+    top_k = args.top_k_features
+
     cfg = load_config()
     paths = resolve_paths(cfg)
     id_col = cfg["loading"]["id_col"]
@@ -61,8 +71,8 @@ def main() -> None:
 
     # Pick the top-K SHAP-attributed stations, look at their mean value per window
     attr = pd.read_parquet(REPO_ROOT / "models" / "station_attribution.parquet")
-    top_stations = attr.head(TOP_K_FEATURES)["station"].tolist()
-    logger.info("top-%d stations to track: %s", TOP_K_FEATURES, top_stations)
+    top_stations = attr.head(top_k)["station"].tolist()
+    logger.info("top-%d stations to track: %s", top_k, top_stations)
 
     features = numeric.drop(columns=[target_col, id_col])
     agg = station_aggregates(features)
@@ -73,7 +83,7 @@ def main() -> None:
 
     # Bin by transit_time_first quantile — equal-sized time windows
     df = df.dropna(subset=["transit_time_first"]).sort_values("transit_time_first").reset_index(drop=True)
-    df["window"] = pd.qcut(df["transit_time_first"], q=N_WINDOWS, labels=False, duplicates="drop")
+    df["window"] = pd.qcut(df["transit_time_first"], q=n_windows, labels=False, duplicates="drop")
 
     per_window = df.groupby("window").agg(
         n=("transit_time_first", "size"),
@@ -117,7 +127,7 @@ def main() -> None:
     axes[2].axhline(0, color="gray", linestyle="--", alpha=0.5)
     axes[2].set_ylabel("z-scored per-window mean")
     axes[2].set_xlabel("time window (sequential, equal-count)")
-    axes[2].set_title(f"Top-{TOP_K_FEATURES} station-mean features across windows")
+    axes[2].set_title(f"Top-{top_k} station-mean features across windows")
     axes[2].legend(loc="upper right", ncol=2)
     axes[2].grid(True, alpha=0.3)
 
@@ -130,7 +140,7 @@ def main() -> None:
     pr_min, pr_max = per_window["positive_rate"].min(), per_window["positive_rate"].max()
     pr_ratio = pr_max / pr_min if pr_min > 0 else float("inf")
     print(f"\n== summary ==")
-    print(f"positive-rate range across {N_WINDOWS} windows: "
+    print(f"positive-rate range across {n_windows} windows: "
           f"{pr_min * 100:.3f}%..{pr_max * 100:.3f}%  (ratio {pr_ratio:.2f}x)")
     # For the standardised feature means: report absolute range, and whether
     # the sign flips across windows. Relative % is meaningless when the
