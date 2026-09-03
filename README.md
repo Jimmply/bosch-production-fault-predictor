@@ -72,7 +72,7 @@ Because these are the model's most attribution-heavy features, a change in their
 
 Both are now on the roadmap; the windowed-model experiment is the immediate next step.
 
-Reproducible summary at [`models/drift_summary.csv`](models/drift_summary.csv). Regenerate with `python scripts/drift_analysis.py`.
+Reproducible summary at [`models/drift_summary.csv`](models/drift_summary.csv). Regenerate with `make drift` (or e.g. `python scripts/drift_analysis.py --n-windows 20` for finer time bins).
 
 ### Hyperparameter tuning — an honest write-up
 
