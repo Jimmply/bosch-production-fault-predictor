@@ -200,7 +200,13 @@ python scripts/train.py
 # 3. Fit the Cox survival model on top-30 SHAP-attributed stations
 python scripts/fit_cox.py
 
-# 4. Launch the dashboard (3 tabs: station heatmap, Cox hazards, cost-weighted PR)
+# 4. Reproduce the drift analysis (~3 min)
+python scripts/drift_analysis.py
+
+# 5. Reproduce the windowed-retraining experiment (~4 min)
+python scripts/windowed_experiment.py --n-blocks 5
+
+# 6. Launch the dashboard (3 tabs: station heatmap, Cox hazards, cost-weighted PR)
 streamlit run src/app.py
 
 # --- Optional flags ---
