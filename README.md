@@ -74,6 +74,37 @@ Both are now on the roadmap; the windowed-model experiment is the immediate next
 
 Reproducible summary at [`models/drift_summary.csv`](models/drift_summary.csv). Regenerate with `make drift` (or e.g. `python scripts/drift_analysis.py --n-windows 20` for finer time bins).
 
+### Windowed retraining — does "just use recent data" actually help?
+
+Direct test of the drift hypothesis. Sorted 1.18M parts chronologically, split into K=5 equal-count blocks (~237k parts each), and for each eval block `b ∈ {1..4}` fit three models and scored them on `b`:
+
+- **windowed(b)** — train only on the immediately preceding block `b−1`
+- **cumulative(b)** — train on ALL blocks strictly before `b` (grows with time)
+- **global-baseline(b)** — the shipped tuned model (trained on everything) evaluated on `b` — for reference / leakage-quantification
+
+All three use the same tuned hyperparameters.
+
+![Windowed vs cumulative vs global-baseline](docs/img/windowed_experiment.png)
+
+| Eval block | Windowed AUC | Cumulative AUC | Global-baseline AUC | Windowed MCC\* | Cumulative MCC\* | Global MCC\* |
+|---|---|---|---|---|---|---|
+| 1 | 0.581 | 0.581† | 0.797 | 0.115 | 0.115† | 0.210 |
+| 2 | 0.590 | 0.594 | 0.787 | 0.178 | 0.195 | 0.225 |
+| 3 | 0.605 | 0.589 | 0.902 | 0.173 | 0.168 | 0.241 |
+| 4 | 0.569 | 0.577 | 0.900 | 0.095 | 0.094 | 0.219 |
+
+*\*MCC at eval-block-optimal threshold. †Windowed and cumulative are identical for block 1 because "the previous block" and "everything before" are the same set.*
+
+**Three real findings.**
+
+1. **Windowed retraining does NOT beat cumulative retraining.** Both hover at AUC 0.58–0.61 across all four eval blocks. Naive "just use the most recent data" doesn't pull ahead. The intuition — "recent data is more like future data" — doesn't work here because the drift isn't monotonic; each block looks structurally *different*, not just newer.
+2. **Cumulative retraining doesn't help either.** Feeding the model 4× more historical data (block 4 cumulative sees ~947k parts) produces essentially the same AUC as windowed (~237k parts). Once the process has drifted, extra past data is roughly zero-information.
+3. **The global-baseline gap quantifies the leakage.** The shipped model gets AUC 0.90 on blocks 3–4 because it was fit on all 1.18M rows including those blocks — it's *memorizing* individual parts, not generalizing. On genuinely held-out blocks (windowed / cumulative) the same hyperparameters give AUC 0.60. **That 0.30-point gap is roughly how much stratified k-fold was overselling every metric.**
+
+**What this means for the roadmap.** Drift is severe enough that neither reweighting the data (cumulative) nor discarding old data (windowed) is a fix on its own. The next real experiment is **drift-aware features** — rolling z-scored versions of the top-SHAP station features, so the model sees each part *relative to the recent baseline* rather than as an absolute value. That's now the highest-priority open item.
+
+Reproducible run: `python scripts/windowed_experiment.py --n-blocks 5` (~4 min compute). Numbers at [`models/windowed_metrics.csv`](models/windowed_metrics.csv).
+
 ### Hyperparameter tuning — an honest write-up
 
 Ran a 15-trial Optuna TPE search on a 150k stratified sample (`scripts/tune_xgb.py`). Best trial: MCC 0.188 on the tuning sample, with `max_depth=8, learning_rate=0.020, n_estimators=100, min_child_weight=7, subsample=0.72, colsample_bytree=0.71`. `train.py` picks these up automatically from `config/tuned_params.yaml`.
@@ -220,8 +251,8 @@ Things I still want to try (in rough priority order):
 - [x] Time-aware CV — implemented (`--split-strategy time`), full-data comparison done. **Big finding: AUC drops 0.717 → 0.563 and fold std grows 10×. See "Split strategy — the big finding" above.** Now shipping as default.
 - [x] Optuna tuning integrated into `train.py` — reads `config/tuned_params.yaml` if `tune_xgb.py` has written it. **Run once; slight AUC gain, flat MCC, tighter Pareto (17 → 11 stations for 70%). Deprioritized further tuning.**
 - [x] **Investigate process drift** — confirmed. Defect rate ranges 0.247%..0.982% (4× swing) across 10 sequential windows; top-SHAP station means flip sign 2–4× across the same windows. Full write-up in "Process drift is real" above; script at `scripts/drift_analysis.py`.
-- [ ] **Windowed / online model** — top open item now. Retrain on sliding time windows, measure whether per-window models beat the single global fit under time-aware CV.
-- [ ] **Drift-aware features** — add rolling z-scored versions of the top-SHAP station features so the model sees deviation-from-recent-baseline rather than raw values.
+- [x] **Windowed / online model** — done. Result: **windowed retraining does NOT beat cumulative retraining**, and neither meaningfully beats a global fit on genuinely held-out blocks (all ~AUC 0.58–0.61 across the 4 eval blocks). Full write-up in "Windowed retraining" above. Deprioritized further work here.
+- [ ] **Drift-aware features** — highest-priority open item now. Add rolling z-scored versions of the top-SHAP station features so the model sees deviation-from-recent-baseline rather than raw values. This is the natural follow-up given that neither retraining strategy on raw values helped.
 - [ ] Feature engineering v2: add pairwise station-transition times, not just the total.
 - [ ] Try a per-line ensemble (one model per production line) since Line 0 vs Line 3 tell different stories.
 - [ ] Actually write the notebooks in `notebooks/` (currently script-first).

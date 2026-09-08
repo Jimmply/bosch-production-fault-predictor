@@ -1,4 +1,4 @@
-.PHONY: setup download train train-sample train-time train-stratified tune cox drift dashboard test clean lint help
+.PHONY: setup download train train-sample train-time train-stratified tune cox drift windowed dashboard test clean lint help
 
 PYTHON := .venv/bin/python
 STREAMLIT := .venv/bin/streamlit
@@ -14,6 +14,7 @@ help:
 	@echo "  make tune        run optuna hyperparameter search -> config/tuned_params.yaml"
 	@echo "  make cox         fit Cox model on top-30 SHAP stations"
 	@echo "  make drift       per-window drift diagnostic -> docs/img/drift_analysis.png"
+	@echo "  make windowed    windowed vs cumulative vs global-baseline experiment"
 	@echo "  make dashboard   launch Streamlit dashboard"
 	@echo "  make test        pytest"
 	@echo "  make clean       remove venv, caches, models"
@@ -47,6 +48,9 @@ cox:
 
 drift:
 	$(PYTHON) scripts/drift_analysis.py
+
+windowed:
+	$(PYTHON) scripts/windowed_experiment.py --n-blocks 5
 
 dashboard:
 	$(STREAMLIT) run src/app.py
