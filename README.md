@@ -105,6 +105,32 @@ All three use the same tuned hyperparameters.
 
 Reproducible run: `python scripts/windowed_experiment.py --n-blocks 5` (~4 min compute). Numbers at [`models/windowed_metrics.csv`](models/windowed_metrics.csv).
 
+### Drift-aware features — used, but redundant
+
+Follow-up to the windowed experiment. Hypothesis: since retraining on raw values didn't fix drift, maybe adding *rolling-normalized* views of the top-SHAP station features will — the model would then see each part's deviation from the recent baseline rather than the raw sensor value.
+
+Implemented in [`src/drift_features.py`](src/drift_features.py) — `rolling_zscore` uses `shift(1).rolling(window)` so no row is in its own baseline (no lookahead). Wired into `train.py` behind `drift_features.enabled: true`. For this run: top-5 SHAP-attributed stations, window = 50,000 rows, min_periods = 1,000.
+
+Same tuned hyperparameters, same time-aware CV, only difference is +5 rolling-z columns for `L3_S33`, `L3_S32`, `L1_S24`, `L3_S29`, `L0_S0`.
+
+| Metric | No drift features | + drift features | Δ |
+|---|---|---|---|
+| CV MCC (mean ± std) | 0.143 ± 0.063 | 0.142 ± 0.060 | ≈ |
+| CV AUC | 0.563 | 0.566 | +0.003 |
+| CV AUC-PR | 0.039 | 0.038 | −0.001 |
+| Full-fit threshold MCC | 0.185 | **0.191** | +0.006 |
+| Pareto stations for 70% \|SHAP\| | 11 | 8 | tighter |
+
+**The features ARE used by the model** — all 5 drift-z columns land in the XGBoost feature-importance top set (gain 513–1301 per column, comparable to raw station features). But **CV metrics barely move**. The trees are already picking up whatever temporal signal the raw features contain via their own splits; a rolling-z view on the same 5 columns is mostly redundant information.
+
+**What this rules out.** The remaining drift is not something you can neutralize by re-normalizing the top-5 features. The label distribution (defect rate 4× swing across time windows) is shifting *conditional on the features* — i.e. it's a P(y | x) shift, not a P(x) shift. Rolling z-scores on x can't fix that.
+
+**Two branches for what to try next:**
+1. **Sub-station features.** The station-mean aggregates smooth over ~50 raw sensor columns per station. Drift may live in specific sensors within a station rather than in the aggregate. Per-sensor rolling z-scores would test that.
+2. **Label-conditional calibration.** Fit the classifier as usual but calibrate its output posterior per time window (e.g. isotonic regression on a rolling-recent slice). This treats the temporal shift as a calibration problem rather than a feature problem.
+
+Neither is trivial, and honestly the marginal +0.006 threshold-MCC gain here suggests the ceiling isn't much higher without a fundamentally different framing. This is where a real project would either accept the ~0.19 MCC as the ceiling for retrospective root-cause use and stop chasing predictive lift, or invest weeks in one of the two branches above.
+
 ### Hyperparameter tuning — an honest write-up
 
 Ran a 15-trial Optuna TPE search on a 150k stratified sample (`scripts/tune_xgb.py`). Best trial: MCC 0.188 on the tuning sample, with `max_depth=8, learning_rate=0.020, n_estimators=100, min_child_weight=7, subsample=0.72, colsample_bytree=0.71`. `train.py` picks these up automatically from `config/tuned_params.yaml`.
@@ -258,7 +284,9 @@ Things I still want to try (in rough priority order):
 - [x] Optuna tuning integrated into `train.py` — reads `config/tuned_params.yaml` if `tune_xgb.py` has written it. **Run once; slight AUC gain, flat MCC, tighter Pareto (17 → 11 stations for 70%). Deprioritized further tuning.**
 - [x] **Investigate process drift** — confirmed. Defect rate ranges 0.247%..0.982% (4× swing) across 10 sequential windows; top-SHAP station means flip sign 2–4× across the same windows. Full write-up in "Process drift is real" above; script at `scripts/drift_analysis.py`.
 - [x] **Windowed / online model** — done. Result: **windowed retraining does NOT beat cumulative retraining**, and neither meaningfully beats a global fit on genuinely held-out blocks (all ~AUC 0.58–0.61 across the 4 eval blocks). Full write-up in "Windowed retraining" above. Deprioritized further work here.
-- [ ] **Drift-aware features** — highest-priority open item. Add rolling z-scored versions of the top-SHAP station features so the model sees deviation-from-recent-baseline rather than raw values. **Module scaffold + tests landed in `src/drift_features.py`; needs to be wired into `train.py` and run under time-aware CV. Next commit's target.**
+- [x] **Drift-aware features** — done. Wired into `train.py` (`drift_features.enabled` config flag + `--no-drift-features` CLI). Full-data run under time-aware CV. **All 5 drift-z features are used by the model (XGBoost gain 513-1301) but CV AUC only moves +0.003. Rolling z-scores on the top-5 stations turn out to be redundant with the raw features; the drift is in P(y|x), not P(x).** Full write-up in "Drift-aware features — used, but redundant" above. Deprioritized further work in this direction.
+- [ ] **Sub-station / per-sensor features** — new top open item. Station aggregates smooth over ~50 raw sensor columns each; drift may live in specific sensors within a station. Try per-sensor rolling z-scores instead of per-station.
+- [ ] **Label-conditional calibration** — alternative branch: fit as usual, then isotonic-calibrate the posterior on a rolling-recent slice per prediction. Treats drift as a calibration problem rather than a feature problem.
 - [ ] Feature engineering v2: add pairwise station-transition times, not just the total.
 - [ ] Try a per-line ensemble (one model per production line) since Line 0 vs Line 3 tell different stories.
 - [ ] Actually write the notebooks in `notebooks/` (currently script-first).

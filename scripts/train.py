@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from baseline_model import optimal_threshold_by_mcc, train_baseline
 from data_loader import load_config, resolve_paths
+from drift_features import add_drift_features
 from features import missing_pattern_features, station_aggregates, transit_time_features
 from station_attribution import aggregate_by_station, compute_shap_values, pareto_stations
 
@@ -79,6 +80,36 @@ def load_train_frame(cfg: dict, sample_n: int | None) -> tuple[pd.DataFrame, pd.
     return X, y, date_features
 
 
+def _add_drift_columns(X: pd.DataFrame, drift_cfg: dict) -> pd.DataFrame:
+    """Append rolling z-scored versions of the top-K SHAP-attributed station-mean features.
+
+    Mutates X in place (adds columns) so the caller doesn't need to reassign.
+    Requires X to be temporally sorted (train.py takes care of this via split=time).
+    """
+    top_k = int(drift_cfg.get("top_stations_from_attribution", 5))
+    window = int(drift_cfg.get("window", 50000))
+    min_periods = int(drift_cfg.get("min_periods", 1000))
+
+    attr_path = REPO_ROOT / "models" / "station_attribution.parquet"
+    if not attr_path.exists():
+        logger.warning("drift_features enabled but %s missing — skipping", attr_path)
+        return X
+    attr = pd.read_parquet(attr_path)
+    top_stations = attr.head(top_k)["station"].tolist()
+    z_cols = [f"{s}__mean" for s in top_stations if f"{s}__mean" in X.columns]
+    if not z_cols:
+        logger.warning("no matching station-mean columns for top stations %s", top_stations)
+        return X
+
+    logger.info("adding drift features for %d stations (window=%d): %s",
+                len(z_cols), window, top_stations[:len(z_cols)])
+    enriched = add_drift_features(X, z_cols, window=window, min_periods=min_periods)
+    # add_drift_features returns a new DataFrame; splice new cols into X in place
+    for new_col in enriched.columns.difference(X.columns):
+        X[new_col] = enriched[new_col].values
+    return X
+
+
 def _maybe_apply_tuned_params(cfg: dict) -> None:
     """If config/tuned_params.yaml exists (written by scripts/tune_xgb.py), overlay its params on baseline_xgb."""
     tuned_path = REPO_ROOT / "config" / "tuned_params.yaml"
@@ -120,6 +151,8 @@ def main() -> None:
                         help="Max rows for SHAP computation (SHAP on 1M+ rows OOMs).")
     parser.add_argument("--split-strategy", choices=["stratified", "time"], default=None,
                         help="Override split.strategy in config (stratified or time-aware CV).")
+    parser.add_argument("--no-drift-features", action="store_true",
+                        help="Disable rolling z-scored drift features even if enabled in config.")
     args = parser.parse_args()
 
     cfg = load_config()
@@ -127,7 +160,21 @@ def main() -> None:
     if args.split_strategy is not None:
         cfg["split"]["strategy"] = args.split_strategy
         logger.info("overriding split.strategy = %s", args.split_strategy)
+    if args.no_drift_features:
+        cfg.setdefault("drift_features", {})["enabled"] = False
+        logger.info("drift features disabled via --no-drift-features")
+
+    drift_cfg = cfg.get("drift_features", {}) or {}
+    if drift_cfg.get("enabled", False):
+        # Drift features require the frame to be time-ordered so rolling means past.
+        # Force the CV strategy to match.
+        cfg["split"]["strategy"] = "time"
+        logger.info("drift_features enabled -> forcing split.strategy=time for consistency")
+
     X, y, transit = load_train_frame(cfg, sample_n=args.sample_n)
+
+    if drift_cfg.get("enabled", False):
+        _add_drift_columns(X, drift_cfg)
     logger.info("positive rate = %.4f (%d / %d)", y.mean(), y.sum(), len(y))
 
     model, metrics = train_baseline(X, y, cfg)

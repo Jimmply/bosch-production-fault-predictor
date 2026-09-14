@@ -43,6 +43,14 @@ station_attribution:
   station_regex: "^L(\\d+)_S(\\d+)_"
   top_k_stations: 15
 
+# Rolling z-scored versions of the top-SHAP station-mean features.
+# Only makes sense with split.strategy: "time" — data must be temporally ordered.
+drift_features:
+  enabled: true
+  top_stations_from_attribution: 5    # read top-K from models/station_attribution.parquet
+  window: 50000                       # rolling window (row count ~ time proxy)
+  min_periods: 1000
+
 streamlit:
   page_title: "Bosch Production Fault Predictor"
   page_icon: "🏭"
