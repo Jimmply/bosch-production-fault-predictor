@@ -24,6 +24,20 @@ Trained on the **full 1,183,747-row training set** with 208 engineered features 
 
 *Bosch's official metric is Matthews Correlation Coefficient (MCC). The 2016 competition winners scored ≈ 0.50 with heavy feature engineering, time-aware validation, and long tuning campaigns; this baseline shipped at 0.185 at threshold-optimal cutoff on a **time-aware split**. See "Split strategy — the big finding" below for why the CV numbers look worse than they did a week ago (they're now honest).*
 
+### Experiments at a glance
+
+Five experiments have been run on this dataset. Each one is written up in full further down; the table is here so a reader can see the arc without scrolling.
+
+| # | Experiment | Outcome | Section |
+|---|---|---|---|
+| 1 | Hyperparameter tuning (Optuna, 15-trial TPE) | AUC +0.006, MCC flat. **Marginal.** | [→](#hyperparameter-tuning--an-honest-write-up) |
+| 2 | Time-aware CV vs stratified k-fold | AUC 0.717 → **0.563**. Reveals ~0.30 pts of leakage in stratified CV. | [→](#split-strategy--the-big-finding) |
+| 3 | Process-drift diagnostic (10 sequential windows) | Defect rate swings **4×** across windows; top-feature means flip sign 2-4×. Drift is real. | [→](#process-drift-is-real) |
+| 4 | Windowed vs cumulative retraining (K=5 blocks) | Both hover AUC 0.58-0.61. Retraining alone **doesn't fix drift**. | [→](#windowed-retraining--does-just-use-recent-data-actually-help) |
+| 5 | Drift-aware rolling-z features (top-5 stations) | Features used by model, but AUC +0.003. Drift is in **P(y\|x), not P(x)**. | [→](#drift-aware-features--used-but-redundant) |
+
+**Net takeaway.** The model as shipped is at MCC ≈ 0.19 (threshold-optimal, time-aware). Neither hyperparameter tuning, retraining strategy, nor rolling-normalised features close the gap to the stratified numbers (which themselves were leaky). The obvious remaining branches (per-sensor features, label-conditional calibration) would each be another multi-week experiment — see the Roadmap.
+
 ### Split strategy — the big finding
 
 Switched cross-validation from stratified k-fold to **time-aware** `TimeSeriesSplit` (parts sorted by `transit_time_first`, folds walk forward in time). Full-data re-run — same tuned hyperparameters, only the split strategy changed:
