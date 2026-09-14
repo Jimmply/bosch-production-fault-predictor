@@ -1,4 +1,4 @@
-.PHONY: setup download train train-sample train-time train-stratified train-nodrift tune cox drift windowed dashboard test clean lint help
+.PHONY: setup download train train-sample train-time train-stratified train-nodrift tune cox drift windowed results dashboard test clean lint help
 
 PYTHON := .venv/bin/python
 STREAMLIT := .venv/bin/streamlit
@@ -16,6 +16,7 @@ help:
 	@echo "  make cox         fit Cox model on top-30 SHAP stations"
 	@echo "  make drift       per-window drift diagnostic -> docs/img/drift_analysis.png"
 	@echo "  make windowed    windowed vs cumulative vs global-baseline experiment"
+	@echo "  make results     regenerate every analysis chart in docs/img/ (~10 min)"
 	@echo "  make dashboard   launch Streamlit dashboard"
 	@echo "  make test        pytest"
 	@echo "  make clean       remove venv, caches, models"
@@ -55,6 +56,10 @@ drift:
 
 windowed:
 	$(PYTHON) scripts/windowed_experiment.py --n-blocks 5
+
+results: drift windowed
+	$(PYTHON) scripts/plot_attribution_by_line.py
+	@echo "all analysis charts regenerated -> docs/img/"
 
 dashboard:
 	$(STREAMLIT) run src/app.py
