@@ -16,7 +16,7 @@ help:
 	@echo "  make cox         fit Cox model on top-30 SHAP stations"
 	@echo "  make drift       per-window drift diagnostic -> docs/img/drift_analysis.png"
 	@echo "  make windowed    windowed vs cumulative vs global-baseline experiment"
-	@echo "  make results     regenerate every analysis chart in docs/img/ (~10 min)"
+	@echo "  make results     regen drift + windowed + per-line charts (hero comes from train)"
 	@echo "  make dashboard   launch Streamlit dashboard"
 	@echo "  make test        pytest"
 	@echo "  make clean       remove venv, caches, models"
