@@ -1,4 +1,4 @@
-.PHONY: setup download train train-sample train-time train-stratified tune cox drift windowed dashboard test clean lint help
+.PHONY: setup download train train-sample train-time train-stratified train-nodrift tune cox drift windowed dashboard test clean lint help
 
 PYTHON := .venv/bin/python
 STREAMLIT := .venv/bin/streamlit
@@ -11,6 +11,7 @@ help:
 	@echo "  make train       train baseline XGBoost + SHAP attribution (uses split.strategy from config)"
 	@echo "  make train-time  train with time-aware TimeSeriesSplit (walk-forward)"
 	@echo "  make train-strat train with stratified k-fold (leaks future info — for comparison only)"
+	@echo "  make train-nodrift  train without drift features (for the drift a/b comparison)"
 	@echo "  make tune        run optuna hyperparameter search -> config/tuned_params.yaml"
 	@echo "  make cox         fit Cox model on top-30 SHAP stations"
 	@echo "  make drift       per-window drift diagnostic -> docs/img/drift_analysis.png"
@@ -39,6 +40,9 @@ train-time:
 
 train-strat:
 	$(PYTHON) scripts/train.py --split-strategy stratified
+
+train-nodrift:
+	$(PYTHON) scripts/train.py --no-drift-features
 
 tune:
 	$(PYTHON) scripts/tune_xgb.py --n-trials 15 --sample-n 150000
