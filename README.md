@@ -174,11 +174,11 @@ Top 3 stations by SHAP-attribution share:
 
 | Rank | Station | Line | Share of \|SHAP\| |
 |---|---|---|---|
-| 1 | L3_S33 | Line 3 | **20.1%** |
-| 2 | L3_S32 | Line 3 | 12.4% |
-| 3 | L1_S24 | Line 1 | 9.8% |
+| 1 | L3_S32 | Line 3 | **19.0%** |
+| 2 | L3_S33 | Line 3 | 18.6% |
+| 3 | L1_S24 | Line 1 | 13.2% |
 
-**Line 3 dominates the top of the list.** Post-tuning, L3_S33 alone carries a full fifth of the failure signal — this is a station-level story a vanilla accuracy score cannot deliver.
+**Line 3 dominates the top of the list.** In the current shipped model (tuned + drift features + time-aware CV), L3_S32 and L3_S33 together carry ~38% of the failure signal — this is a station-level story a vanilla accuracy score cannot deliver.
 
 ### Rolled up to line level, Line 3 is even clearer
 
