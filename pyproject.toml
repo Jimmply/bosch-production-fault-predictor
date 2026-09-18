@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bosch-production-fault-predictor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Survival-analysis + station-attribution SHAP on the Bosch Production Line Performance dataset (14 GB, 1.18M parts, 51 stations, 0.6% fail rate)"
 readme = "README.md"
 license = { text = "MIT" }
