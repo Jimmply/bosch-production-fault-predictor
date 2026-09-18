@@ -4,7 +4,7 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Predicting quality-control failures on the [Bosch Production Line Performance](https://www.kaggle.com/c/bosch-production-line-performance) Kaggle dataset — **1.18 million real manufactured parts, 968+ anonymized sensor features across 51 stations, 0.6% failure rate**.
+Predicting quality-control failures on the [Bosch Production Line Performance](https://www.kaggle.com/c/bosch-production-line-performance) Kaggle dataset — **1.18 million real manufactured parts, 968+ anonymized sensor features across 51 stations, 0.6% failure rate**. Full iteration history in [`CHANGELOG.md`](CHANGELOG.md).
 
 Rather than yet another vanilla-XGBoost notebook (of which Kaggle has hundreds), this project frames the problem two novel ways:
 
