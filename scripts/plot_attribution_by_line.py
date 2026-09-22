@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+from plot_utils import LINE_PALETTE  # noqa: E402
 
 
 def main() -> None:
@@ -29,8 +31,7 @@ def main() -> None:
     print(per_line.to_string(index=False))
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    palette = {0: "#1f77b4", 1: "#2ca02c", 2: "#ff7f0e", 3: "#d62728"}
-    colors = [palette[l] for l in per_line["line"]]
+    colors = [LINE_PALETTE[l] for l in per_line["line"]]
     bars = ax.bar(per_line["label"], per_line["share_pct"], color=colors)
     for bar, pct in zip(bars, per_line["share_pct"]):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,

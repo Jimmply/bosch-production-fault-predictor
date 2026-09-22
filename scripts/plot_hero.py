@@ -25,11 +25,11 @@ import yaml
 from matplotlib.patches import Patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+from plot_utils import LINE_PALETTE  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
-
-LINE_PALETTE = {0: "#1f77b4", 1: "#2ca02c", 2: "#ff7f0e", 3: "#d62728"}
 
 
 def main(top_n: int = 20) -> None:
