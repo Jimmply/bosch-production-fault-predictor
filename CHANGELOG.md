@@ -2,6 +2,13 @@
 
 Notable changes across iterations. Most-recent first.
 
+## [Unreleased]
+
+- `scripts/plot_hero.py` extracted from `train.py` so `make results`
+  regenerates every analysis chart in one shot.
+- `src/plot_utils.py` shares the four-line color palette between plot
+  scripts so the colors can't drift between charts.
+
 ## 2026-09-13 — drift-aware features (marginal, honestly)
 
 - Wired `drift_features` into `train.py` behind a config flag. Added
